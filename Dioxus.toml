@@ -1,0 +1,15 @@
+[application]
+name = "dioxus-editor"
+default_platform = "web"
+out_dir = "dist"
+asset_dir = "public"
+
+[web.app]
+title = "dioxus-editor"
+
+[web.resource]
+style = []
+script = []
+
+[web.wasm_bindgen_test]
+html = "wasm-bindgen-test.html"
