@@ -39,7 +39,7 @@
 | **M-01** | 行移動 (Ctrl+Up/Down) | `Ctrl+Up` / `Ctrl+Down` を押下 | 行が上下に入れ替わること。 |
 | **M-02** | 構造移動 (Alt+Up/Down) | 子要素を持つ行で `Alt+Up` / `Alt+Down` | 子要素を連れたまま（構造を維持して）兄弟要素間で移動すること。 |
 | **M-03** | インデント移動 (Ctrl+Left/Right)| `Ctrl+Right` / `Ctrl+Left` を押下 | インデントレベルが変更されること（Tab操作と同等）。 |
-| **M-04** | 行複製 (Shift+Alt+Up/Down)| `Shift+Alt+Up` / `Down` を押下 | 現在行（選択範囲）が上下に複製されること。 |
+| **M-04** | 行複製 (Shift+Alt+Up/Down)| `Shift+Alt+Up` / `Shift+Alt+Down` を押下 | 現在行（選択範囲）が上下に複製されること。 |
 | **M-05** | レベル0改行 (Shift+Enter)| 深い階層で `Shift+Enter` を押下 | インデントレベル0の新しい行が挿入されること。 |
 
 ## 4. 記法・装飾テスト (Notation & Formatting)
