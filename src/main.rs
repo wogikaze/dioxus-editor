@@ -7,8 +7,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     rsx! {
-        main {
-            class: "app",
+        main { class: "app",
             h1 { "Dioxus Web" }
             p { "Ready to build a reusable UI as a web library." }
         }

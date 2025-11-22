@@ -11,5 +11,7 @@ title = "dioxus-editor"
 style = []
 script = []
 
-[web.wasm_bindgen_test]
-html = "wasm-bindgen-test.html"
+[web.resource.dev]
+# Javascript code file
+# serve: [dev-server] only
+script = []
