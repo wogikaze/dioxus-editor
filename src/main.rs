@@ -11,6 +11,7 @@ fn App() -> Element {
     let initial_text = "アウトライン\n 子トピック\n\t更に深いトピック\n　全角スペース始まり";
 
     rsx! {
+        document::Stylesheet { href: asset!("/assets/style.css") }
         div {
             h1 { "Dioxus Outliner" }
             outliner::Outliner {
