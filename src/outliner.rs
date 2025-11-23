@@ -4,6 +4,12 @@ use dioxus::prelude::*;
 use keyboard_types::{Key, Modifiers};
 use std::ops::Range;
 
+#[derive(Copy, Clone)]
+enum MoveDirection {
+    Up,
+    Down,
+}
+
 trait CursorPositionExt {
     fn cursor_position(&self) -> usize;
 }
@@ -156,6 +162,12 @@ fn handle_keydown(
         .unwrap_or_default();
     let caret_column = current_caret_column(line_index, selection, fallback_text.chars().count());
 
+    if key == Key::Enter && modifiers.contains(Modifiers::SHIFT) {
+        event.prevent_default();
+        insert_root_line(line_index, document, selection);
+        return;
+    }
+
     if key == Key::Tab && modifiers.contains(Modifiers::SHIFT) {
         event.prevent_default();
         adjust_indent(document, selection, false);
@@ -166,6 +178,78 @@ fn handle_keydown(
         Key::Tab => {
             event.prevent_default();
             adjust_indent(document, selection, true);
+        }
+        Key::ArrowLeft => {
+            if modifiers.contains(Modifiers::CONTROL) {
+                event.prevent_default();
+                adjust_indent(document, selection, false);
+            }
+        }
+        Key::ArrowRight => {
+            if modifiers.contains(Modifiers::CONTROL) {
+                event.prevent_default();
+                adjust_indent(document, selection, true);
+            }
+        }
+        Key::ArrowUp => {
+            if modifiers.contains(Modifiers::ALT) && modifiers.contains(Modifiers::SHIFT) {
+                event.prevent_default();
+                duplicate_subtree(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Up,
+                    caret_column,
+                );
+            } else if modifiers.contains(Modifiers::ALT) {
+                event.prevent_default();
+                move_subtree(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Up,
+                    caret_column,
+                );
+            } else if modifiers.contains(Modifiers::CONTROL) {
+                event.prevent_default();
+                move_single_line(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Up,
+                    caret_column,
+                );
+            }
+        }
+        Key::ArrowDown => {
+            if modifiers.contains(Modifiers::ALT) && modifiers.contains(Modifiers::SHIFT) {
+                event.prevent_default();
+                duplicate_subtree(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Down,
+                    caret_column,
+                );
+            } else if modifiers.contains(Modifiers::ALT) {
+                event.prevent_default();
+                move_subtree(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Down,
+                    caret_column,
+                );
+            } else if modifiers.contains(Modifiers::CONTROL) {
+                event.prevent_default();
+                move_single_line(
+                    line_index,
+                    document,
+                    selection,
+                    MoveDirection::Down,
+                    caret_column,
+                );
+            }
         }
         Key::Enter => {
             event.prevent_default();
@@ -293,4 +377,193 @@ fn selected_line_range(document: &Document, selection: &SelectionRange) -> Range
     let end_line = end.line.min(document.lines.len() - 1);
 
     start_line..(end_line + 1)
+}
+
+fn subtree_range(lines: &[Line], start_index: usize) -> Range<usize> {
+    let base_indent = lines[start_index].indent;
+    let mut end = start_index + 1;
+    while end < lines.len() && lines[end].indent > base_indent {
+        end += 1;
+    }
+    start_index..end
+}
+
+fn clamp_caret_column(document: &Document, line_index: usize, desired_column: usize) -> usize {
+    document
+        .lines
+        .get(line_index)
+        .map(|line| desired_column.min(line.text.chars().count()))
+        .unwrap_or(0)
+}
+
+fn move_single_line(
+    line_index: usize,
+    mut document: Signal<Document>,
+    mut selection: Signal<SelectionRange>,
+    direction: MoveDirection,
+    caret_column: usize,
+) {
+    let new_index = {
+        let mut doc = document.write();
+        if doc.lines.is_empty() || line_index >= doc.lines.len() {
+            return;
+        }
+
+        match direction {
+            MoveDirection::Up => {
+                if line_index == 0 {
+                    return;
+                }
+                doc.lines.swap(line_index, line_index - 1);
+                line_index - 1
+            }
+            MoveDirection::Down => {
+                if line_index + 1 >= doc.lines.len() {
+                    return;
+                }
+                doc.lines.swap(line_index, line_index + 1);
+                line_index + 1
+            }
+        }
+    };
+
+    let clamped_column = clamp_caret_column(&document.read(), new_index, caret_column);
+    selection.set(SelectionRange::caret(new_index, clamped_column));
+}
+
+fn move_subtree(
+    line_index: usize,
+    mut document: Signal<Document>,
+    mut selection: Signal<SelectionRange>,
+    direction: MoveDirection,
+    caret_column: usize,
+) {
+    let new_index = {
+        let mut doc = document.write();
+        if line_index >= doc.lines.len() {
+            return;
+        }
+
+        let range = subtree_range(&doc.lines, line_index);
+        let base_indent = doc.lines[line_index].indent;
+
+        match direction {
+            MoveDirection::Up => {
+                let mut search = range.start as isize - 1;
+                let mut previous_start = None;
+                while search >= 0 {
+                    let idx = search as usize;
+                    let indent = doc.lines[idx].indent;
+                    if indent < base_indent {
+                        break;
+                    }
+                    if indent == base_indent {
+                        previous_start = Some(idx);
+                        break;
+                    }
+                    search -= 1;
+                }
+
+                let Some(prev_start) = previous_start else {
+                    return;
+                };
+                let block: Vec<Line> = doc.lines.drain(range.clone()).collect();
+                doc.lines.splice(prev_start..prev_start, block);
+                prev_start
+            }
+            MoveDirection::Down => {
+                let mut next_start = None;
+                for idx in range.end..doc.lines.len() {
+                    let indent = doc.lines[idx].indent;
+                    if indent < base_indent {
+                        break;
+                    }
+                    if indent == base_indent {
+                        next_start = Some(idx);
+                        break;
+                    }
+                }
+
+                let Some(next_start) = next_start else {
+                    return;
+                };
+
+                let next_range = subtree_range(&doc.lines, next_start);
+                let block: Vec<Line> = doc.lines.drain(range.clone()).collect();
+                let adjusted_next_start = next_start.saturating_sub(range.len());
+                let insert_at = adjusted_next_start + next_range.len();
+                doc.lines.splice(insert_at..insert_at, block);
+                insert_at
+            }
+        }
+    };
+
+    let clamped_column = clamp_caret_column(&document.read(), new_index, caret_column);
+    selection.set(SelectionRange::caret(new_index, clamped_column));
+}
+
+fn duplicate_subtree(
+    line_index: usize,
+    mut document: Signal<Document>,
+    mut selection: Signal<SelectionRange>,
+    direction: MoveDirection,
+    caret_column: usize,
+) {
+    let insert_at = {
+        let mut doc = document.write();
+        if line_index >= doc.lines.len() {
+            return;
+        }
+
+        let range = subtree_range(&doc.lines, line_index);
+        let original_block: Vec<Line> = doc.lines[range.clone()].to_vec();
+        let mut new_block = Vec::with_capacity(original_block.len());
+        for mut line in original_block {
+            line.id = doc.next_line_id();
+            new_block.push(line);
+        }
+
+        match direction {
+            MoveDirection::Up => {
+                let insert_at = range.start;
+                doc.lines.splice(insert_at..insert_at, new_block);
+                insert_at
+            }
+            MoveDirection::Down => {
+                let insert_at = range.end;
+                doc.lines.splice(insert_at..insert_at, new_block);
+                insert_at
+            }
+        }
+    };
+
+    let clamped_column = clamp_caret_column(&document.read(), insert_at, caret_column);
+    selection.set(SelectionRange::caret(insert_at, clamped_column));
+}
+
+fn insert_root_line(
+    line_index: usize,
+    mut document: Signal<Document>,
+    mut selection: Signal<SelectionRange>,
+) {
+    let new_index = {
+        let mut doc = document.write();
+        let insert_at = if line_index < doc.lines.len() {
+            line_index + 1
+        } else {
+            doc.lines.len()
+        };
+
+        let new_line = Line {
+            id: doc.next_line_id(),
+            indent: 0,
+            text: String::new(),
+            collapsed: false,
+        };
+
+        doc.lines.insert(insert_at, new_line);
+        insert_at
+    };
+
+    selection.set(SelectionRange::caret(new_index, 0));
 }
