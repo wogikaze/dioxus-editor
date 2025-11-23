@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use uuid::Uuid;
 
 fn main() {
     launch(App);
@@ -6,172 +7,247 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let mut document = use_signal(|| String::from(""));
+    let mut document = use_signal(Document::example);
 
-    let char_count = use_memo(move || document.read().chars().count());  
-    let line_count = use_memo(move || document.read().lines().count());  
-
+    let visible_nodes = use_memo(move || document.read().visible_nodes());
+    let stats = use_memo(move || document.read().stats());
     rsx! {
-        main {
-            style: {
-                r#"
-                    min-height: 100vh;
-                    background: #0f1117;
-                    color: #e5e7eb;
-                    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-                    margin: 0;
-                    padding: 24px;
-                    box-sizing: border-box;
-                "#
-            },
-            header {
-                style: {
-                    r#"
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        margin-bottom: 16px;
-                    "#
-                },
+        document::Stylesheet { href: asset!("/assets/style.css") }
+        main { class: "surface",
+            header { class: "header",
                 div {
-                    h1 { "Dioxus Editor" }
-                    p { style: "color: #9ca3af; margin: 4px 0 0;",
-                        "Lightweight text editing scaffold"
-                    }
+                    h1 { "Dioxus Outliner" }
+                    p { class: "subhead", "Hierarchical notes with collapsible rows" }
                 }
-                button {
-                    style: {
-                        r#"
-                            background: #2563eb;
-                            color: white;
-                            border: none;
-                            padding: 10px 16px;
-                            border-radius: 8px;
-                            font-weight: 600;
-                            cursor: pointer;
-                            box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
-                        "#
-                    },
-                    "New Document"
+                div { class: "header-actions",
+                    button { class: "ghost", "Import" }
+                    button { class: "primary", onclick: move |_| document.write().append_root_line(), "New top-level item" }
                 }
             }
-            section {
-                style: {
-                    r#"
-                        display: grid;
-                        grid-template-columns: 260px 1fr;
-                        gap: 16px;
-                        min-height: calc(100vh - 120px);
-                    "#
-                },
-                nav {
-                    style: {
-                        r#"
-                            background: #111827;
-                            border: 1px solid #1f2937;
-                            border-radius: 12px;
-                            padding: 16px;
-                            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
-                        "#
-                    },
-                    h2 { style: "margin: 0 0 12px; font-size: 16px;", "Workspace" }
-                    ul { style: "list-style: none; padding: 0; margin: 0; display: grid; gap: 8px;",
-                        li {
-                            style: {
-                                r#"
-                                    background: #0b1221;
-                                    border: 1px solid #1f2937;
-                                    border-radius: 10px;
-                                    padding: 10px 12px;
-                                    display: flex;
-                                    align-items: center;
-                                    justify-content: space-between;
-                                "#
-                            },
-                            span { "Current draft" }
-                            small { style: "color: #9ca3af;", "Unsaved" }
-                        }
-                        li {
-                            style: {
-                                r#"
-                                    border: 1px dashed #374151;
-                                    color: #9ca3af;
-                                    border-radius: 10px;
-                                    padding: 10px 12px;
-                                    text-align: center;
-                                "#
-                            },
-                            "Templates coming soon"
-                        }
+            section { class: "layout",
+                nav { class: "panel",
+                    h2 { "Workspace" }
+                    p { class: "muted", "Reusable outline primitives" }
+                    ul { class: "legend",
+                        li { span { class: "dot", style: "background: #60a5fa;" } span { "Editable nodes" } }
+                        li { span { class: "dot", style: "background: #f59e0b;" } span { "Collapsible branches" } }
+                        li { span { class: "dot", style: "background: #34d399;" } span { "Visible list derived from tree" } }
                     }
+                    section { class: "stats",
+                        div { "Lines" span { "{stats.read().line_count}" } }
+                        div { "Characters" span { "{stats.read().char_count}" } }
+                        div { "Collapsed" span { "{stats.read().collapsed_branches}" } }
+                    }
+                    p { class: "muted", "This step wires the core document model to a visible list and folding controls." }
                 }
-                section {
-                    style: {
-                        r#"
-                            background: #0b1221;
-                            border: 1px solid #1f2937;
-                            border-radius: 12px;
-                            padding: 20px;
-                            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-                            display: grid;
-                            grid-template-rows: auto 1fr auto;
-                            gap: 16px;
-                        "#
-                    },
-                    div { style: "display: flex; align-items: center; justify-content: space-between;",
-                        h2 { "Editor" }
-                        span { style: "color: #9ca3af;", "Autosave disabled" }
+                section { class: "panel editor",
+                    div { class: "panel-head",
+                        h2 { "Outline" }
+                        span { class: "muted", "Derived rows: {visible_nodes.read().len()}" }
                     }
-                    textarea {
-                        style: {
-                            r#"
-                                width: 100%;
-                                min-height: 320px;
-                                background: #0f172a;
-                                color: #e5e7eb;
-                                border: 1px solid #1f2937;
-                                border-radius: 10px;
-                                padding: 12px;
-                                font-size: 16px;
-                                line-height: 1.6;
-                                resize: vertical;
-                                box-sizing: border-box;
-                                outline: none;
-                            "#
-                        },
-                        value: document.read().clone(),
-                        placeholder: "Start typing your ideas...",
-                        oninput: move |evt| document.set(evt.value()),
-                    }
-                    section {
-                        style: {
-                            r#"
-                                background: rgba(255, 255, 255, 0.02);
-                                border: 1px solid #1f2937;
-                                border-radius: 10px;
-                                padding: 12px;
-                            "#
-                        },
-                        h3 { style: "margin: 0 0 8px;", "Preview" }
-                        p { style: "white-space: pre-wrap; margin: 0; color: #cbd5e1;",
-                            "{document.read()}"
-                        }
-                    }
-                    footer {
-                        style: {
-                            r#"
-                                display: flex;
-                                align-items: center;
-                                gap: 12px;
-                                color: #9ca3af;
-                                font-size: 14px;
-                            "#
-                        },
-                        span { "Characters: {char_count}" }
-                        span { "Lines: {line_count}" }
+                    OutlineEditor { document: document.clone(), visible_nodes }
+                    footer { class: "footer",
+                        div { class: "pill", "Undo-tree & selection logic stubbed" }
+                        div { class: "pill", "Next: keyboard bindings and history" }
                     }
                 }
             }
         }
     }
+}
+
+#[component]
+fn OutlineEditor(document: Signal<Document>, visible_nodes: Memo<Vec<VisibleNode>>) -> Element {
+    rsx! {
+        section { class: "outline",
+            for node in visible_nodes.read().iter().cloned() {
+                OutlineRow { node, document: document.clone() }
+            }
+        }
+    }
+}
+
+#[component]
+fn OutlineRow(node: VisibleNode, mut document: Signal<Document>) -> Element {
+    let padding = format!("calc(12px + {} * 20px)", node.indent);
+    let toggle_icon = if node.has_children {
+        if node.collapsed { "▶" } else { "▼" }
+    } else {
+        "•"
+    };
+    let toggle_title = if node.has_children {
+        if node.collapsed {
+            "Expand children"
+        } else {
+            "Collapse children"
+        }
+    } else {
+        "Leaf node"
+    };
+
+    rsx! {
+        div { class: "row",
+            div { class: "row-left", style: format!("padding-left: {padding};"),
+                button {
+                    class: if node.has_children { "toggle" } else { "toggle disabled" },
+                    disabled: !node.has_children,
+                    title: toggle_title,
+                    onclick: move |_| document.write().toggle_collapse(node.id),
+                    "{toggle_icon}"
+                }
+                div { class: "bullet" }
+            }
+            textarea {
+                class: "editor-input",
+                value: node.text.clone(),
+                oninput: move |evt| document.write().update_text(node.id, evt.value()),
+            }
+            button {
+                class: "ghost",
+                onclick: move |_| document.write().insert_after(node.id),
+                "+"
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Node {
+    id: Uuid,
+    indent: usize,
+    text: String,
+    collapsed: bool,
+}
+
+impl Node {
+    fn new(indent: usize, text: impl Into<String>, collapsed: bool) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            indent,
+            text: text.into(),
+            collapsed,
+        }
+    }
+}
+
+#[derive(Clone, Default, Debug)]
+struct Document {
+    nodes: Vec<Node>,
+}
+
+impl Document {
+    fn example() -> Self {
+        let mut nodes = vec![
+            Node::new(0, "Roadmap", false),
+            Node::new(1, "Foundation: core model + visible rows", false),
+            Node::new(2, "Implement selection and caret stubs", false),
+            Node::new(2, "Undo tree data model placeholder", false),
+            Node::new(1, "Structure operations", false),
+            Node::new(2, "Indent / dedent nodes", false),
+            Node::new(2, "Move branches while preserving children", true),
+            Node::new(3, "Alt+Up/Down should respect collapsed state", false),
+            Node::new(1, "Rendering & notation", false),
+            Node::new(2, "Inline styles, tags, and links", false),
+            Node::new(2, "Blocks: code, table, LaTeX", false),
+            Node::new(1, "Input helpers & search", false),
+            Node::new(2, "Bracket completion and IME guards", false),
+            Node::new(2, "Command palette & shortcuts", false),
+            Node::new(1, "Performance & embedding", false),
+            Node::new(2, "Virtualized list for 5k+ rows", false),
+            Node::new(2, "Expose embeddable editor component", false),
+        ];
+
+        nodes.insert(6, Node::new(3, "Leaf after deep jump", false));
+        Self { nodes }
+    }
+
+    fn visible_nodes(&self) -> Vec<VisibleNode> {
+        let mut rows = Vec::with_capacity(self.nodes.len());
+        let mut hidden_below: Option<usize> = None;
+
+        for (index, node) in self.nodes.iter().enumerate() {
+            if let Some(depth) = hidden_below {
+                if node.indent > depth {
+                    continue;
+                }
+
+                hidden_below = None;
+            }
+
+            let next_indent = self.nodes.get(index + 1).map(|n| n.indent);
+            let has_children = next_indent.is_some_and(|n| n > node.indent);
+
+            rows.push(VisibleNode {
+                id: node.id,
+                indent: node.indent,
+                text: node.text.clone(),
+                collapsed: node.collapsed,
+                has_children,
+            });
+
+            if node.collapsed {
+                hidden_below = Some(node.indent);
+            }
+        }
+
+        rows
+    }
+
+    fn toggle_collapse(&mut self, id: Uuid) {
+        if let Some(node) = self.nodes.iter_mut().find(|node| node.id == id) {
+            node.collapsed = !node.collapsed;
+        }
+    }
+
+    fn update_text(&mut self, id: Uuid, new_text: String) {
+        if let Some(node) = self.nodes.iter_mut().find(|node| node.id == id) {
+            node.text = new_text;
+        }
+    }
+
+    fn insert_after(&mut self, id: Uuid) {
+        if let Some(position) = self.nodes.iter().position(|node| node.id == id) {
+            let indent = self.nodes[position].indent;
+            self.nodes
+                .insert(position + 1, Node::new(indent, "New line", false));
+        }
+    }
+
+    fn append_root_line(&mut self) {
+        self.nodes.push(Node::new(0, "New root item", false));
+    }
+
+    fn stats(&self) -> DocumentStats {
+        let mut char_count = 0;
+        let mut collapsed_branches = 0;
+
+        for node in &self.nodes {
+            char_count += node.text.chars().count();
+            if node.collapsed {
+                collapsed_branches += 1;
+            }
+        }
+
+        DocumentStats {
+            line_count: self.nodes.len(),
+            char_count,
+            collapsed_branches,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct DocumentStats {
+    line_count: usize,
+    char_count: usize,
+    collapsed_branches: usize,
+}
+
+#[derive(Clone)]
+struct VisibleNode {
+    id: Uuid,
+    indent: usize,
+    text: String,
+    collapsed: bool,
+    has_children: bool,
 }
