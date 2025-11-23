@@ -11,6 +11,8 @@ fn App() -> Element {
 
     let visible_nodes = use_memo(move || document.read().visible_nodes());
     let stats = use_memo(move || document.read().stats());
+    let stats_value = stats();
+    let visible_nodes_value = visible_nodes();
     rsx! {
         document::Stylesheet { href: asset!("/assets/style.css") }
         main { class: "surface",
@@ -34,18 +36,18 @@ fn App() -> Element {
                         li { span { class: "dot", style: "background: #34d399;" } span { "Visible list derived from tree" } }
                     }
                     section { class: "stats",
-                        div { "Lines" span { "{stats.read().line_count}" } }
-                        div { "Characters" span { "{stats.read().char_count}" } }
-                        div { "Collapsed" span { "{stats.read().collapsed_branches}" } }
+                        div { "Lines" span { "{stats_value.line_count}" } }
+                        div { "Characters" span { "{stats_value.char_count}" } }
+                        div { "Collapsed" span { "{stats_value.collapsed_branches}" } }
                     }
                     p { class: "muted", "This step wires the core document model to a visible list and folding controls." }
                 }
                 section { class: "panel editor",
                     div { class: "panel-head",
                         h2 { "Outline" }
-                        span { class: "muted", "Derived rows: {visible_nodes.read().len()}" }
+                        span { class: "muted", "Derived rows: {visible_nodes_value.len()}" }
                     }
-                    OutlineEditor { document: document.clone(), visible_nodes }
+                    OutlineEditor { document: document.clone(), visible_nodes: visible_nodes_value.clone() }
                     footer { class: "footer",
                         div { class: "pill", "Undo-tree & selection logic stubbed" }
                         div { class: "pill", "Next: keyboard bindings and history" }
@@ -57,10 +59,10 @@ fn App() -> Element {
 }
 
 #[component]
-fn OutlineEditor(document: Signal<Document>, visible_nodes: Memo<Vec<VisibleNode>>) -> Element {
+fn OutlineEditor(document: Signal<Document>, visible_nodes: Vec<VisibleNode>) -> Element {
     rsx! {
         section { class: "outline",
-            for node in visible_nodes.read().iter().cloned() {
+            for node in visible_nodes.into_iter() {
                 OutlineRow { node, document: document.clone() }
             }
         }
@@ -236,14 +238,14 @@ impl Document {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct DocumentStats {
     line_count: usize,
     char_count: usize,
     collapsed_branches: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct VisibleNode {
     id: Uuid,
     indent: usize,
