@@ -155,6 +155,8 @@ fn LineView(props: LineViewProps) -> Element {
                 }
             } else {
                 // Render view is clickable to set focus
+                // Note: Sets caret to position 0. Computing exact click position 
+                // in rendered HTML would require complex coordinate calculations.
                 div {
                     class: "line-render-container",
                     onclick: move |_| {
@@ -882,7 +884,6 @@ fn move_caret_vertical(
 
     // Clamp the column to the new line's length
     let clamped_column = clamp_caret_column(&doc, new_line_index, caret_column);
-    drop(doc);
     
     selection.set(SelectionRange::caret(new_line_index, clamped_column));
 }
