@@ -4,6 +4,27 @@ use dioxus::prelude::*;
 use keyboard_types::{Key, Modifiers};
 use std::ops::Range;
 
+#[derive(Clone, PartialEq, Debug)]
+enum InlineNode {
+    Text(String),
+    Bold(Vec<InlineNode>),
+    Italic(Vec<InlineNode>),
+    Strikethrough(Vec<InlineNode>),
+    Underline(Vec<InlineNode>),
+    Center(Vec<InlineNode>),
+    Right(Vec<InlineNode>),
+    Quote(Vec<InlineNode>),
+    Code(String),
+    Tag(String),
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum LineAlignment {
+    None,
+    Center,
+    Right,
+}
+
 #[derive(Copy, Clone)]
 enum MoveDirection {
     Up,
@@ -97,6 +118,7 @@ fn LineView(props: LineViewProps) -> Element {
             class: "outliner-line",
             style: format!("margin-left: {}px;", line.indent * 16),
             span { class: "line-number", "{line_index + 1}" }
+            {render_line(line_index, &line, document.clone())}
             input {
                 class: "line-input",
                 value: line.text.clone(),
@@ -125,6 +147,288 @@ fn LineView(props: LineViewProps) -> Element {
                     handle_keydown(evt, line_index, document, selection);
                 },
             }
+        }
+    }
+}
+
+fn render_line(line_index: usize, line: &Line, document: Signal<Document>) -> Element {
+    if let Some((level, content)) = parse_heading_line(&line.text) {
+        let nodes = parse_inline_nodes(content);
+
+        return match level {
+            1 => rsx! { h1 { class: "line-render", {render_inline(&nodes)} } },
+            2 => rsx! { h2 { class: "line-render", {render_inline(&nodes)} } },
+            3 => rsx! { h3 { class: "line-render", {render_inline(&nodes)} } },
+            4 => rsx! { h4 { class: "line-render", {render_inline(&nodes)} } },
+            5 => rsx! { h5 { class: "line-render", {render_inline(&nodes)} } },
+            _ => rsx! { h6 { class: "line-render", {render_inline(&nodes)} } },
+        };
+    }
+
+    if let Some((checked, content)) = parse_checkbox_line(&line.text) {
+        let nodes = parse_inline_nodes(content);
+        let toggle_handle = document.clone();
+
+        return rsx! {
+            div { class: "line-render",
+                input {
+                    r#type: "checkbox",
+                    checked: checked,
+                    onclick: move |_| toggle_checkbox(line_index, toggle_handle.clone()),
+                }
+                span { {render_inline(&nodes)} }
+            }
+        };
+    }
+
+    let (alignment, content) = parse_alignment_prefix(&line.text);
+    let nodes = parse_inline_nodes(content);
+    let alignment_style = match alignment {
+        LineAlignment::None => String::new(),
+        LineAlignment::Center => "text-align: center;".to_string(),
+        LineAlignment::Right => "text-align: right;".to_string(),
+    };
+
+    rsx! {
+        div { class: "line-render", style: alignment_style, {render_inline(&nodes)} }
+    }
+}
+
+fn parse_alignment_prefix(text: &str) -> (LineAlignment, &str) {
+    for (marker, alignment) in [
+        ("[| ", LineAlignment::Center),
+        ("[> ", LineAlignment::Right),
+    ] {
+        if let Some(rest) = text.strip_prefix(marker) {
+            if let Some(end_idx) = rest.rfind(']') {
+                return (alignment, &rest[..end_idx]);
+            }
+        }
+    }
+
+    (LineAlignment::None, text)
+}
+
+fn parse_checkbox_line(text: &str) -> Option<(bool, &str)> {
+    if let Some(rest) = text.strip_prefix("[ ]") {
+        let content = rest.strip_prefix(' ').unwrap_or(rest);
+        return Some((false, content));
+    }
+
+    if let Some(rest) = text
+        .strip_prefix("[x]")
+        .or_else(|| text.strip_prefix("[X]"))
+    {
+        let content = rest.strip_prefix(' ').unwrap_or(rest);
+        return Some((true, content));
+    }
+
+    None
+}
+
+fn parse_heading_line(text: &str) -> Option<(usize, &str)> {
+    let rest = text.strip_prefix('[')?;
+    let hash_count = rest.chars().take_while(|ch| *ch == '#').count();
+    if !(1..=6).contains(&hash_count) {
+        return None;
+    }
+
+    let after_hash = &rest[hash_count..];
+    let after_space = after_hash.strip_prefix(' ')?;
+    let closing = after_space.rfind(']')?;
+    Some((hash_count, &after_space[..closing]))
+}
+
+fn parse_inline_nodes(text: &str) -> Vec<InlineNode> {
+    let chars: Vec<(usize, char)> = text.char_indices().collect();
+    let mut index = 0usize;
+    let (nodes, _) = parse_inline_range(text, &chars, &mut index, false);
+    nodes
+}
+
+fn parse_inline_range(
+    text: &str,
+    chars: &[(usize, char)],
+    index: &mut usize,
+    stop_at_closing: bool,
+) -> (Vec<InlineNode>, bool) {
+    let mut nodes = Vec::new();
+    let mut buffer = String::new();
+    let mut closed = false;
+
+    while *index < chars.len() {
+        let ch = chars[*index].1;
+        if stop_at_closing && ch == ']' {
+            closed = true;
+            *index += 1;
+            break;
+        }
+
+        match ch {
+            '`' => {
+                flush_buffer(&mut buffer, &mut nodes);
+                *index += 1;
+                let code_start = *index;
+                while *index < chars.len() && chars[*index].1 != '`' {
+                    *index += 1;
+                }
+
+                if *index < chars.len() {
+                    let start_byte = chars
+                        .get(code_start)
+                        .map(|(byte, _)| *byte)
+                        .unwrap_or(text.len());
+                    let end_byte = chars
+                        .get(*index)
+                        .map(|(byte, _)| *byte)
+                        .unwrap_or(text.len());
+                    let content = text.get(start_byte..end_byte).unwrap_or("");
+                    nodes.push(InlineNode::Code(content.to_string()));
+                    *index += 1;
+                } else {
+                    let start_byte = if code_start == 0 {
+                        0
+                    } else {
+                        chars
+                            .get(code_start - 1)
+                            .map(|(byte, _)| *byte)
+                            .unwrap_or(0)
+                    };
+                    buffer.push_str(&text[start_byte..]);
+                    *index = chars.len();
+                }
+            }
+            '[' => {
+                flush_buffer(&mut buffer, &mut nodes);
+                if let Some((node, new_index)) = parse_bracket_node(text, chars, *index) {
+                    nodes.push(node);
+                    *index = new_index;
+                } else {
+                    buffer.push('[');
+                    *index += 1;
+                }
+            }
+            '#' => {
+                let is_start = *index == 0 || chars[*index - 1].1.is_whitespace();
+                if is_start {
+                    let tag_start_byte = chars[*index].0;
+                    *index += 1;
+                    let mut end = *index;
+                    while end < chars.len() && !chars[end].1.is_whitespace() {
+                        end += 1;
+                    }
+
+                    let tag_end_byte = if end < chars.len() {
+                        chars[end].0
+                    } else {
+                        text.len()
+                    };
+
+                    let tag_text = &text[tag_start_byte + 1..tag_end_byte];
+                    if tag_text.is_empty() {
+                        buffer.push('#');
+                        *index = end;
+                    } else {
+                        flush_buffer(&mut buffer, &mut nodes);
+                        nodes.push(InlineNode::Tag(tag_text.to_string()));
+                        *index = end;
+                    }
+                } else {
+                    buffer.push('#');
+                    *index += 1;
+                }
+            }
+            _ => {
+                buffer.push(ch);
+                *index += 1;
+            }
+        }
+    }
+
+    flush_buffer(&mut buffer, &mut nodes);
+    (nodes, closed)
+}
+
+fn flush_buffer(buffer: &mut String, nodes: &mut Vec<InlineNode>) {
+    if !buffer.is_empty() {
+        nodes.push(InlineNode::Text(std::mem::take(buffer)));
+    }
+}
+
+fn parse_bracket_node(
+    text: &str,
+    chars: &[(usize, char)],
+    index: usize,
+) -> Option<(InlineNode, usize)> {
+    if index + 2 >= chars.len() {
+        return None;
+    }
+
+    let marker = chars[index + 1].1;
+    if !matches!(marker, '*' | '/' | '-' | '_' | '|' | '>' | '"') {
+        return None;
+    }
+
+    if chars[index + 2].1 != ' ' {
+        return None;
+    }
+
+    let mut inner_index = index + 3;
+    let (children, closed) = parse_inline_range(text, chars, &mut inner_index, true);
+    if !closed {
+        return None;
+    }
+
+    let node = match marker {
+        '*' => InlineNode::Bold(children),
+        '/' => InlineNode::Italic(children),
+        '-' => InlineNode::Strikethrough(children),
+        '_' => InlineNode::Underline(children),
+        '|' => InlineNode::Center(children),
+        '>' => InlineNode::Right(children),
+        '"' => InlineNode::Quote(children),
+        _ => return None,
+    };
+
+    Some((node, inner_index))
+}
+
+fn render_nodes(nodes: &[InlineNode]) -> Vec<Element> {
+    nodes.iter().map(render_node).collect()
+}
+
+fn render_inline(nodes: &[InlineNode]) -> Element {
+    let children = render_nodes(nodes);
+    rsx! { Fragment { for child in children { {child} } } }
+}
+
+fn render_node(node: &InlineNode) -> Element {
+    match node {
+        InlineNode::Text(text) => rsx! { span { "{text}" } },
+        InlineNode::Bold(children) => rsx! { strong { {render_inline(children)} } },
+        InlineNode::Italic(children) => rsx! { em { {render_inline(children)} } },
+        InlineNode::Strikethrough(children) => rsx! { del { {render_inline(children)} } },
+        InlineNode::Underline(children) => {
+            rsx! { span { style: "text-decoration: underline;", {render_inline(children)} } }
+        }
+        InlineNode::Center(children) => {
+            rsx! { span { style: "display: block; text-align: center;", {render_inline(children)} } }
+        }
+        InlineNode::Right(children) => {
+            rsx! { span { style: "display: block; text-align: right;", {render_inline(children)} } }
+        }
+        InlineNode::Quote(children) => rsx! { q { {render_inline(children)} } },
+        InlineNode::Code(code) => rsx! { code { "{code}" } },
+        InlineNode::Tag(tag) => rsx! { span { class: "tag", "#{tag}" } },
+    }
+}
+
+fn toggle_checkbox(line_index: usize, mut document: Signal<Document>) {
+    if let Some(line) = document.write().lines.get_mut(line_index) {
+        if line.text.starts_with("[ ]") {
+            line.text = line.text.replacen("[ ]", "[x]", 1);
+        } else if line.text.to_lowercase().starts_with("[x]") {
+            line.text = line.text.replacen("[x]", "[ ]", 1);
         }
     }
 }
