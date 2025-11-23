@@ -191,64 +191,22 @@ fn handle_keydown(
                 adjust_indent(document, selection, true);
             }
         }
-        Key::ArrowUp => {
+        Key::ArrowUp | Key::ArrowDown => {
+            let direction = if key == Key::ArrowUp {
+                MoveDirection::Up
+            } else {
+                MoveDirection::Down
+            };
+
             if modifiers.contains(Modifiers::ALT) && modifiers.contains(Modifiers::SHIFT) {
                 event.prevent_default();
-                duplicate_subtree(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Up,
-                    caret_column,
-                );
+                duplicate_subtree(line_index, document, selection, direction, caret_column);
             } else if modifiers.contains(Modifiers::ALT) {
                 event.prevent_default();
-                move_subtree(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Up,
-                    caret_column,
-                );
+                move_subtree(line_index, document, selection, direction, caret_column);
             } else if modifiers.contains(Modifiers::CONTROL) {
                 event.prevent_default();
-                move_single_line(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Up,
-                    caret_column,
-                );
-            }
-        }
-        Key::ArrowDown => {
-            if modifiers.contains(Modifiers::ALT) && modifiers.contains(Modifiers::SHIFT) {
-                event.prevent_default();
-                duplicate_subtree(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Down,
-                    caret_column,
-                );
-            } else if modifiers.contains(Modifiers::ALT) {
-                event.prevent_default();
-                move_subtree(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Down,
-                    caret_column,
-                );
-            } else if modifiers.contains(Modifiers::CONTROL) {
-                event.prevent_default();
-                move_single_line(
-                    line_index,
-                    document,
-                    selection,
-                    MoveDirection::Down,
-                    caret_column,
-                );
+                move_single_line(line_index, document, selection, direction, caret_column);
             }
         }
         Key::Enter => {
@@ -406,29 +364,33 @@ fn move_single_line(
     let new_index = {
         let mut doc = document.write();
         if doc.lines.is_empty() || line_index >= doc.lines.len() {
-            return;
-        }
-
-        match direction {
-            MoveDirection::Up => {
-                if line_index == 0 {
-                    return;
+            None
+        } else {
+            match direction {
+                MoveDirection::Up => {
+                    if line_index > 0 {
+                        doc.lines.swap(line_index, line_index - 1);
+                        Some(line_index - 1)
+                    } else {
+                        None
+                    }
                 }
-                doc.lines.swap(line_index, line_index - 1);
-                line_index - 1
-            }
-            MoveDirection::Down => {
-                if line_index + 1 >= doc.lines.len() {
-                    return;
+                MoveDirection::Down => {
+                    if line_index + 1 < doc.lines.len() {
+                        doc.lines.swap(line_index, line_index + 1);
+                        Some(line_index + 1)
+                    } else {
+                        None
+                    }
                 }
-                doc.lines.swap(line_index, line_index + 1);
-                line_index + 1
             }
         }
     };
 
-    let clamped_column = clamp_caret_column(&document.read(), new_index, caret_column);
-    selection.set(SelectionRange::caret(new_index, clamped_column));
+    if let Some(new_index) = new_index {
+        let clamped_column = clamp_caret_column(&document.read(), new_index, caret_column);
+        selection.set(SelectionRange::caret(new_index, clamped_column));
+    }
 }
 
 fn move_subtree(
@@ -516,12 +478,15 @@ fn duplicate_subtree(
         }
 
         let range = subtree_range(&doc.lines, line_index);
-        let original_block: Vec<Line> = doc.lines[range.clone()].to_vec();
-        let mut new_block = Vec::with_capacity(original_block.len());
-        for mut line in original_block {
-            line.id = doc.next_line_id();
-            new_block.push(line);
-        }
+        let new_block: Vec<Line> = doc.lines[range.clone()]
+            .to_vec()
+            .iter()
+            .map(|line| {
+                let mut new_line = line.clone();
+                new_line.id = doc.next_line_id();
+                new_line
+            })
+            .collect();
 
         match direction {
             MoveDirection::Up => {
@@ -548,11 +513,7 @@ fn insert_root_line(
 ) {
     let new_index = {
         let mut doc = document.write();
-        let insert_at = if line_index < doc.lines.len() {
-            line_index + 1
-        } else {
-            doc.lines.len()
-        };
+        let insert_at = line_index + 1;
 
         let new_line = Line {
             id: doc.next_line_id(),
