@@ -2,7 +2,7 @@ use std::iter::repeat;
 
 pub type LineId = u64;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct CaretPosition {
     pub line: usize,
     pub column: usize,
@@ -18,18 +18,16 @@ impl SelectionRange {
     pub fn caret(line: usize, column: usize) -> Self {
         let position = CaretPosition { line, column };
         Self {
-            anchor: position.clone(),
+            anchor: position,
             focus: position,
         }
     }
 
     pub fn normalized(&self) -> (CaretPosition, CaretPosition) {
-        if self.anchor.line < self.focus.line
-            || (self.anchor.line == self.focus.line && self.anchor.column <= self.focus.column)
-        {
-            (self.anchor.clone(), self.focus.clone())
+        if self.anchor <= self.focus {
+            (self.anchor, self.focus)
         } else {
-            (self.focus.clone(), self.anchor.clone())
+            (self.focus, self.anchor)
         }
     }
 
@@ -50,11 +48,12 @@ pub struct Line {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Document {
     pub lines: Vec<Line>,
+    pub next_id: LineId,
 }
 
 impl Document {
     pub fn from_text(text: &str) -> Self {
-        let lines = text
+        let lines: Vec<Line> = text
             .split('\n')
             .enumerate()
             .map(|(index, raw_line)| {
@@ -68,7 +67,14 @@ impl Document {
             })
             .collect();
 
-        Self { lines }
+        let next_id = lines
+            .iter()
+            .map(|line| line.id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1);
+
+        Self { lines, next_id }
     }
 
     #[allow(dead_code)]
@@ -86,13 +92,10 @@ impl Document {
             .join("\n")
     }
 
-    pub fn next_line_id(&self) -> LineId {
-        self.lines
-            .iter()
-            .map(|line| line.id)
-            .max()
-            .unwrap_or(0)
-            .saturating_add(1)
+    pub fn next_line_id(&mut self) -> LineId {
+        let id = self.next_id;
+        self.next_id = self.next_id.saturating_add(1);
+        id
     }
 }
 

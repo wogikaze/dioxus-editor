@@ -1,7 +1,49 @@
 use crate::model::{Document, Line, SelectionRange, char_to_byte_index};
+use dioxus::events::FormData;
 use dioxus::prelude::*;
 use keyboard_types::{Key, Modifiers};
 use std::ops::Range;
+
+trait CursorPositionExt {
+    fn cursor_position(&self) -> usize;
+}
+
+impl CursorPositionExt for Event<FormData> {
+    fn cursor_position(&self) -> usize {
+        cursor_position_from_event(self)
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn cursor_position_from_event(evt: &Event<FormData>) -> usize {
+    use wasm_bindgen::JsCast;
+    use web_sys::{HtmlInputElement, HtmlTextAreaElement};
+
+    let fallback = evt.value().chars().count();
+
+    evt.data()
+        .downcast::<web_sys::Event>()
+        .and_then(|event| event.target())
+        .and_then(|target| {
+            target
+                .dyn_into::<HtmlInputElement>()
+                .ok()
+                .and_then(|input| input.selection_start().ok().flatten())
+                .or_else(|| {
+                    target
+                        .dyn_into::<HtmlTextAreaElement>()
+                        .ok()
+                        .and_then(|textarea| textarea.selection_start().ok().flatten())
+                })
+        })
+        .map(|pos| pos as usize)
+        .unwrap_or(fallback)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn cursor_position_from_event(evt: &Event<FormData>) -> usize {
+    evt.value().chars().count()
+}
 
 #[derive(Props, Clone, PartialEq)]
 pub struct OutlinerProps {
@@ -15,11 +57,11 @@ pub fn Outliner(props: OutlinerProps) -> Element {
 
     rsx! {
         div { class: "outliner",
-            for (index, line) in document.read().lines.clone().into_iter().enumerate() {
+            for (index, line) in document.read().lines.iter().enumerate() {
                 LineView {
                     key: "{line.id}",
                     line_index: index,
-                    line,
+                    line: line.clone(),
                     document: document.clone(),
                     selection: selection.clone(),
                 }
@@ -40,11 +82,11 @@ struct LineViewProps {
 fn LineView(props: LineViewProps) -> Element {
     let line_index = props.line_index;
     let document = props.document;
-    let selection = props.selection;
+    let mut selection = props.selection;
     let line = props.line;
 
-    let fallback_text_for_focus = line.text.clone();
-    let fallback_text_for_click = line.text.clone();
+    let fallback_text_for_focus_len = line.text.chars().count();
+    let fallback_text_for_click_len = fallback_text_for_focus_len;
 
     rsx! {
         div {
@@ -55,21 +97,25 @@ fn LineView(props: LineViewProps) -> Element {
                 class: "line-input",
                 value: line.text.clone(),
                 oninput: move |evt| {
-                    handle_input(evt.value(), line_index, document, selection);
+                    handle_input(
+                        evt.value(),
+                        evt.cursor_position(),
+                        line_index,
+                        document,
+                        selection,
+                    );
                 },
                 onfocus: move |_| {
-                    update_selection_from_input(
+                    selection.set(SelectionRange::caret(
                         line_index,
-                        selection,
-                        &fallback_text_for_focus,
-                    );
+                        fallback_text_for_focus_len,
+                    ));
                 },
                 onclick: move |_| {
-                    update_selection_from_input(
+                    selection.set(SelectionRange::caret(
                         line_index,
-                        selection,
-                        &fallback_text_for_click,
-                    );
+                        fallback_text_for_click_len,
+                    ));
                 },
                 onkeydown: move |evt| {
                     handle_keydown(evt, line_index, document, selection);
@@ -81,15 +127,19 @@ fn LineView(props: LineViewProps) -> Element {
 
 fn handle_input(
     new_text: String,
+    cursor_pos_bytes: usize,
     line_index: usize,
     mut document: Signal<Document>,
-    selection: Signal<SelectionRange>,
+    mut selection: Signal<SelectionRange>,
 ) {
+    let cursor_pos_bytes = cursor_pos_bytes.min(new_text.len());
+    let cursor_pos_chars = new_text[..cursor_pos_bytes].chars().count();
+
     if let Some(line) = document.write().lines.get_mut(line_index) {
-        line.text = new_text.clone();
+        line.text = new_text;
     }
 
-    update_selection_from_input(line_index, selection, &new_text);
+    selection.set(SelectionRange::caret(line_index, cursor_pos_chars));
 }
 
 fn handle_keydown(
@@ -139,15 +189,6 @@ fn handle_keydown(
     }
 }
 
-fn update_selection_from_input(
-    line_index: usize,
-    mut selection: Signal<SelectionRange>,
-    fallback_text: &str,
-) {
-    let caret_column = current_caret_column(line_index, selection, fallback_text.chars().count());
-    selection.set(SelectionRange::caret(line_index, caret_column));
-}
-
 fn current_caret_column(
     line_index: usize,
     selection: Signal<SelectionRange>,
@@ -195,27 +236,32 @@ fn handle_backspace(
     mut document: Signal<Document>,
     mut selection: Signal<SelectionRange>,
 ) {
-    let mut doc = document.write();
+    let mut new_selection = None;
 
-    if doc.lines.is_empty() || line_index >= doc.lines.len() {
-        return;
-    }
+    {
+        let mut doc = document.write();
 
-    if let Some(line) = doc.lines.get_mut(line_index) {
-        if line.indent > 0 {
-            line.indent = line.indent.saturating_sub(1);
-            selection.set(SelectionRange::caret(line_index, 0));
+        if doc.lines.is_empty() || line_index >= doc.lines.len() {
             return;
+        }
+
+        if let Some(line) = doc.lines.get_mut(line_index) {
+            if line.indent > 0 {
+                line.indent = line.indent.saturating_sub(1);
+                new_selection = Some(SelectionRange::caret(line_index, 0));
+            } else if line_index > 0 {
+                let current_line = doc.lines.remove(line_index);
+                let previous_line = &mut doc.lines[line_index - 1];
+                let previous_length = previous_line.text.chars().count();
+                previous_line.text.push_str(&current_line.text);
+
+                new_selection = Some(SelectionRange::caret(line_index - 1, previous_length));
+            }
         }
     }
 
-    if line_index > 0 {
-        let current_line = doc.lines.remove(line_index);
-        let previous_line = &mut doc.lines[line_index - 1];
-        let previous_length = previous_line.text.chars().count();
-        previous_line.text.push_str(&current_line.text);
-
-        selection.set(SelectionRange::caret(line_index - 1, previous_length));
+    if let Some(selection_range) = new_selection {
+        selection.set(selection_range);
     }
 }
 
