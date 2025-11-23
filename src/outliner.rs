@@ -154,14 +154,15 @@ fn LineView(props: LineViewProps) -> Element {
 fn render_line(line_index: usize, line: &Line, document: Signal<Document>) -> Element {
     if let Some((level, content)) = parse_heading_line(&line.text) {
         let nodes = parse_inline_nodes(content);
+        let rendered_nodes = render_inline(&nodes);
 
         return match level {
-            1 => rsx! { h1 { class: "line-render", {render_inline(&nodes)} } },
-            2 => rsx! { h2 { class: "line-render", {render_inline(&nodes)} } },
-            3 => rsx! { h3 { class: "line-render", {render_inline(&nodes)} } },
-            4 => rsx! { h4 { class: "line-render", {render_inline(&nodes)} } },
-            5 => rsx! { h5 { class: "line-render", {render_inline(&nodes)} } },
-            _ => rsx! { h6 { class: "line-render", {render_inline(&nodes)} } },
+            1 => rsx! { h1 { class: "line-render", {rendered_nodes} } },
+            2 => rsx! { h2 { class: "line-render", {rendered_nodes} } },
+            3 => rsx! { h3 { class: "line-render", {rendered_nodes} } },
+            4 => rsx! { h4 { class: "line-render", {rendered_nodes} } },
+            5 => rsx! { h5 { class: "line-render", {rendered_nodes} } },
+            _ => rsx! { h6 { class: "line-render", {rendered_nodes} } },
         };
     }
 
@@ -210,20 +211,19 @@ fn parse_alignment_prefix(text: &str) -> (LineAlignment, &str) {
 }
 
 fn parse_checkbox_line(text: &str) -> Option<(bool, &str)> {
-    if let Some(rest) = text.strip_prefix("[ ]") {
-        let content = rest.strip_prefix(' ').unwrap_or(rest);
-        return Some((false, content));
-    }
-
-    if let Some(rest) = text
+    let (checked, rest) = if let Some(rest) = text.strip_prefix("[ ]") {
+        (false, rest)
+    } else if let Some(rest) = text
         .strip_prefix("[x]")
         .or_else(|| text.strip_prefix("[X]"))
     {
-        let content = rest.strip_prefix(' ').unwrap_or(rest);
-        return Some((true, content));
-    }
+        (true, rest)
+    } else {
+        return None;
+    };
 
-    None
+    let content = rest.strip_prefix(' ').unwrap_or(rest);
+    Some((checked, content))
 }
 
 fn parse_heading_line(text: &str) -> Option<(usize, &str)> {
@@ -427,8 +427,10 @@ fn toggle_checkbox(line_index: usize, mut document: Signal<Document>) {
     if let Some(line) = document.write().lines.get_mut(line_index) {
         if line.text.starts_with("[ ]") {
             line.text = line.text.replacen("[ ]", "[x]", 1);
-        } else if line.text.to_lowercase().starts_with("[x]") {
+        } else if line.text.starts_with("[x]") {
             line.text = line.text.replacen("[x]", "[ ]", 1);
+        } else if line.text.starts_with("[X]") {
+            line.text = line.text.replacen("[X]", "[ ]", 1);
         }
     }
 }
