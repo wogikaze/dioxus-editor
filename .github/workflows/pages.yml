@@ -26,12 +26,40 @@ jobs:
 
       - name: Cache cargo builds
         uses: swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Cache cargo-binstall
+        uses: actions/cache@v4
+        id: cache-binstall
+        with:
+          path: |
+            ~/.cargo/bin/cargo-binstall
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-cargo-binstall-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-binstall-
 
       - name: Install cargo-binstall
+        if: steps.cache-binstall.outputs.cache-hit != 'true'
         run: cargo install cargo-binstall --locked
 
+      - name: Cache dioxus-cli
+        uses: actions/cache@v4
+        id: cache-dx
+        with:
+          path: |
+            ~/.cargo/bin/dx
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
+          key: ${{ runner.os }}-dioxus-cli-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-dioxus-cli-
+
       - name: Install dioxus-cli
-        run: cargo binstall dioxus-cli --force
+        if: steps.cache-dx.outputs.cache-hit != 'true'
+        run: cargo binstall dioxus-cli --yes
 
       - name: Check project
         run: dx check
