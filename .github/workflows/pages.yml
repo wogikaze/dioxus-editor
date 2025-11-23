@@ -59,7 +59,7 @@ jobs:
 
       - name: Install dioxus-cli
         if: steps.cache-dx.outputs.cache-hit != 'true'
-        run: cargo binstall dioxus-cli --force
+        run: cargo binstall dioxus-cli --yes
 
       - name: Check project
         run: dx check
