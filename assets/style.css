@@ -1,0 +1,226 @@
+body {
+    min-height: 100vh;
+    background: radial-gradient(circle at 10% 10%, rgba(59, 130, 246, 0.08), transparent 25%),
+                radial-gradient(circle at 90% 20%, rgba(16, 185, 129, 0.08), transparent 25%),
+                #0b1020;
+    color: #e5e7eb;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    margin: 0;
+}
+
+.surface {
+    padding: 24px;
+    box-sizing: border-box;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.subhead {
+    color: #9ca3af;
+    margin: 4px 0 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 16px;
+    min-height: calc(100vh - 120px);
+}
+
+.panel {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+}
+
+.panel h2 {
+    margin-top: 0;
+    margin-bottom: 8px;
+}
+
+.legend {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+    display: grid;
+    gap: 8px;
+}
+
+.legend li {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    color: #cbd5e1;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.stats {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0;
+    color: #cbd5e1;
+}
+
+.stats div {
+    display: flex;
+    justify-content: space-between;
+}
+
+.muted {
+    color: #9ca3af;
+    margin: 0;
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+
+.editor {
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    gap: 12px;
+}
+
+.outline {
+    background: #0c1426;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    padding: 8px 10px;
+    transition: border-color 150ms ease, transform 150ms ease;
+}
+
+.row:hover {
+    border-color: #2563eb;
+    transform: translateY(-1px);
+}
+
+.row-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 130px;
+}
+
+.bullet {
+    width: 8px;
+    height: 8px;
+    background: linear-gradient(135deg, #60a5fa, #6366f1);
+    border-radius: 50%;
+}
+
+.editor-input {
+    width: 100%;
+    min-height: 32px;
+    background: #0f172a;
+    color: #e5e7eb;
+    border: 1px solid #1f2937;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 15px;
+    line-height: 1.5;
+    resize: vertical;
+    box-sizing: border-box;
+    outline: none;
+}
+
+.editor-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+.toggle {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid #1f2937;
+    background: #0b1221;
+    color: #e5e7eb;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.toggle:hover:not(.disabled) {
+    background: #111a2f;
+    border-color: #2563eb;
+}
+
+.toggle.disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.ghost {
+    background: transparent;
+    border: 1px solid #374151;
+    color: #cbd5e1;
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease;
+}
+
+.ghost:hover {
+    border-color: #60a5fa;
+    color: #e5e7eb;
+}
+
+.primary {
+    background: #2563eb;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
+}
+
+.footer {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+.pill {
+    padding: 6px 10px;
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid #1f2937;
+}
