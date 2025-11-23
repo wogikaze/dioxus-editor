@@ -33,7 +33,10 @@ jobs:
         uses: actions/cache@v4
         id: cache-binstall
         with:
-          path: ~/.cargo/bin/cargo-binstall
+          path: |
+            ~/.cargo/bin/cargo-binstall
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
           key: ${{ runner.os }}-cargo-binstall-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-binstall-
@@ -46,7 +49,10 @@ jobs:
         uses: actions/cache@v4
         id: cache-dx
         with:
-          path: ~/.cargo/bin/dx
+          path: |
+            ~/.cargo/bin/dx
+            ~/.cargo/.crates.toml
+            ~/.cargo/.crates2.json
           key: ${{ runner.os }}-dioxus-cli-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-dioxus-cli-
