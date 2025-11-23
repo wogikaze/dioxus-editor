@@ -8,13 +8,8 @@ fn main() {
 fn App() -> Element {
     let mut document = use_signal(|| String::from(""));
 
-    let text_value = document.read().clone();
-    let char_count = text_value.chars().count();
-    let line_count = if text_value.is_empty() {
-        0
-    } else {
-        text_value.lines().count()
-    };
+    let char_count = use_memo(move || document.read().chars().count());  
+    let line_count = use_memo(move || document.read().lines().count());  
 
     rsx! {
         main {
@@ -144,7 +139,7 @@ fn App() -> Element {
                                 outline: none;
                             "#
                         },
-                        value: text_value.clone(),
+                        value: document.read().clone(),
                         placeholder: "Start typing your ideas...",
                         oninput: move |evt| document.set(evt.value()),
                     }
@@ -159,7 +154,7 @@ fn App() -> Element {
                         },
                         h3 { style: "margin: 0 0 8px;", "Preview" }
                         p { style: "white-space: pre-wrap; margin: 0; color: #cbd5e1;",
-                            "{text_value}"
+                            "{document.read()}"
                         }
                     }
                     footer {
