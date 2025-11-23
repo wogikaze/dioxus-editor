@@ -26,13 +26,11 @@ fn cursor_position_from_event(evt: &Event<FormData>) -> usize {
         .and_then(|event| event.target())
         .and_then(|target| {
             target
-                .dyn_into::<HtmlInputElement>()
-                .ok()
+                .dyn_ref::<HtmlInputElement>()
                 .and_then(|input| input.selection_start().ok().flatten())
                 .or_else(|| {
                     target
-                        .dyn_into::<HtmlTextAreaElement>()
-                        .ok()
+                        .dyn_ref::<HtmlTextAreaElement>()
                         .and_then(|textarea| textarea.selection_start().ok().flatten())
                 })
         })
