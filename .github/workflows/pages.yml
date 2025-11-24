@@ -45,24 +45,23 @@ jobs:
         if: steps.cache-binstall.outputs.cache-hit != 'true'
         run: cargo install cargo-binstall --locked
 
-      - name: Cache dioxus-cli
+      - name: Cache cargo
         uses: actions/cache@v4
-        id: cache-dx
         with:
           path: |
-            ~/.cargo/bin/dx
+            ~/.cargo/bin
             ~/.cargo/.crates.toml
             ~/.cargo/.crates2.json
-          key: ${{ runner.os }}-dioxus-cli-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-dioxus-cli-
-
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+      
       - name: Install dioxus-cli
-        if: steps.cache-dx.outputs.cache-hit != 'true'
-        run: cargo binstall dioxus-cli
-
-      - name: Check project
-        run: dx check
+        run: cargo binstall dioxus-cli --force --no-confirm
+      
+      - name: Add cargo to PATH
+        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      
+      - name: Check dx works
+        run: dx --version
 
       - name: Bundle for web
         run: dx bundle --platform web
