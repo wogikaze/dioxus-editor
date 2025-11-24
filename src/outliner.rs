@@ -126,8 +126,26 @@ fn LineView(props: LineViewProps) -> Element {
             if is_focused {
                 input {
                     class: "line-input",
+                    r#type: "text",
                     value: line.text.clone(),
-                    autofocus: true,
+                    onmounted: move |event| {
+                        // Focus the input when it's mounted
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            use wasm_bindgen::JsCast;
+                            if let Some(web_event) = event.data().downcast::<web_sys::Event>() {
+                                if let Some(target) = web_event.target() {
+                                    if let Some(input) = target.dyn_ref::<web_sys::HtmlInputElement>() {
+                                        let _ = input.focus();
+                                    }
+                                }
+                            }
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = event;
+                        }
+                    },
                     oninput: move |evt| {
                         handle_input(
                             evt.value(),
