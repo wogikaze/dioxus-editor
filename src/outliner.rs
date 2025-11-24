@@ -113,39 +113,75 @@ fn LineView(props: LineViewProps) -> Element {
     let fallback_text_for_focus_len = line.text.chars().count();
     let fallback_text_for_click_len = fallback_text_for_focus_len;
 
+    // Check if this line has the caret
+    let is_focused = selection.read().focus.line == line_index;
+
     rsx! {
         div {
             class: "outliner-line",
             style: format!("margin-left: {}px;", line.indent * 16),
             span { class: "line-number", "{line_index + 1}" }
-            {render_line(line_index, &line, document.clone())}
-            input {
-                class: "line-input",
-                value: line.text.clone(),
-                oninput: move |evt| {
-                    handle_input(
-                        evt.value(),
-                        evt.cursor_position(),
-                        line_index,
-                        document,
-                        selection,
-                    );
-                },
-                onfocus: move |_| {
-                    selection.set(SelectionRange::caret(
-                        line_index,
-                        fallback_text_for_focus_len,
-                    ));
-                },
-                onclick: move |_| {
-                    selection.set(SelectionRange::caret(
-                        line_index,
-                        fallback_text_for_click_len,
-                    ));
-                },
-                onkeydown: move |evt| {
-                    handle_keydown(evt, line_index, document, selection);
-                },
+            
+            // Show input only if this line is focused, otherwise show rendered view
+            if is_focused {
+                input {
+                    class: "line-input",
+                    r#type: "text",
+                    value: line.text.clone(),
+                    onmounted: move |event| {
+                        // Focus the input when it's mounted
+                        #[cfg(target_arch = "wasm32")]
+                        {
+                            use wasm_bindgen::JsCast;
+                            if let Some(web_event) = event.data().downcast::<web_sys::Event>() {
+                                if let Some(target) = web_event.target() {
+                                    if let Some(input) = target.dyn_ref::<web_sys::HtmlInputElement>() {
+                                        let _ = input.focus();
+                                    }
+                                }
+                            }
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        {
+                            let _ = event;
+                        }
+                    },
+                    oninput: move |evt| {
+                        handle_input(
+                            evt.value(),
+                            evt.cursor_position(),
+                            line_index,
+                            document,
+                            selection,
+                        );
+                    },
+                    onfocus: move |_| {
+                        selection.set(SelectionRange::caret(
+                            line_index,
+                            fallback_text_for_focus_len,
+                        ));
+                    },
+                    onclick: move |_| {
+                        selection.set(SelectionRange::caret(
+                            line_index,
+                            fallback_text_for_click_len,
+                        ));
+                    },
+                    onkeydown: move |evt| {
+                        handle_keydown(evt, line_index, document, selection);
+                    },
+                }
+            } else {
+                // Render view is clickable to set focus
+                // Note: Sets caret to position 0. Computing exact click position 
+                // in rendered HTML would require complex coordinate calculations.
+                div {
+                    class: "line-render-container",
+                    onclick: move |_| {
+                        selection.set(SelectionRange::caret(line_index, 0));
+                    },
+                    {render_line(line_index, &line, document.clone())}
+                }
             }
         }
     }
@@ -513,6 +549,10 @@ fn handle_keydown(
             } else if modifiers.contains(Modifiers::CONTROL) {
                 event.prevent_default();
                 move_single_line(line_index, document, selection, direction, caret_column);
+            } else {
+                // Basic arrow navigation without modifiers
+                event.prevent_default();
+                move_caret_vertical(line_index, document, selection, direction, caret_column);
             }
         }
         Key::Enter => {
@@ -833,4 +873,35 @@ fn insert_root_line(
     };
 
     selection.set(SelectionRange::caret(new_index, 0));
+}
+
+fn move_caret_vertical(
+    line_index: usize,
+    document: Signal<Document>,
+    mut selection: Signal<SelectionRange>,
+    direction: MoveDirection,
+    caret_column: usize,
+) {
+    let doc = document.read();
+    let new_line_index = match direction {
+        MoveDirection::Up => {
+            if line_index > 0 {
+                line_index - 1
+            } else {
+                return; // Already at first line
+            }
+        }
+        MoveDirection::Down => {
+            if line_index + 1 < doc.lines.len() {
+                line_index + 1
+            } else {
+                return; // Already at last line
+            }
+        }
+    };
+
+    // Clamp the column to the new line's length
+    let clamped_column = clamp_caret_column(&doc, new_line_index, caret_column);
+    
+    selection.set(SelectionRange::caret(new_line_index, clamped_column));
 }
